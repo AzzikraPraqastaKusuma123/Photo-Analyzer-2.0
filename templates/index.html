@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="id" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Photo Analyzer 2.0</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root { --bs-body-font-family: 'Poppins', sans-serif; }
+        [data-bs-theme="dark"] { --bs-body-bg: #1a1a1a; --bs-body-color: #e0e0e0; --bs-tertiary-bg: #2a2a2a; --bs-border-color: #444; }
+        .container { max-width: 1400px; }
+        .card { border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: all 0.3s ease; }
+        [data-bs-theme="dark"] .card { box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+        .card-header { font-weight: 600; letter-spacing: 0.5px; background-color: transparent; }
+        .color-palette { display: flex; height: 50px; border-radius: 0.5rem; overflow: hidden; }
+        .color-swatch { flex: 1; transition: flex 0.2s ease-in-out; display: flex; align-items: center; justify-content: center; color: white; text-shadow: 1px 1px 2px black; font-size: 0.8rem;}
+        .color-swatch:hover { flex: 3; }
+        .annotated-image { max-width: 100%; height: auto; border-radius: 0.5rem; }
+        .tooltip-inner { font-size: 0.75rem; }
+        .nav-pills .nav-link { font-weight: 600; }
+        .spinner-wrapper { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 1056; display: none; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+    <div class="spinner-wrapper" id="loading-spinner">
+        <div class="text-center text-white">
+            <div class="spinner-border" style="width: 3rem; height: 3rem;" role="status"></div>
+            <p class="mt-3 fs-5">Menganalisis... Proses ini mungkin butuh waktu sejenak.</p>
+        </div>
+    </div>
+
+    <div class="container my-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="display-5 fw-bold">Photo Analyzer <sup class="text-primary fs-4">2.0</sup></h1>
+            <button class="btn btn-outline-secondary" id="theme-toggle"><i class="bi bi-moon-stars-fill"></i></button>
+        </div>
+        
+        <div class="card mb-4">
+            <div class="card-body">
+                <form id="upload-form" action="/analyze" method="post" enctype="multipart/form-data">
+                    <ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
+                      <li class="nav-item" role="presentation"><button class="nav-link active" id="pills-upload-tab" data-bs-toggle="pill" data-bs-target="#pills-upload" type="button" role="tab">Unggah File</button></li>
+                      <li class="nav-item" role="presentation"><button class="nav-link" id="pills-url-tab" data-bs-toggle="pill" data-bs-target="#pills-url" type="button" role="tab">Gunakan URL</button></li>
+                    </ul>
+                    <div class="tab-content" id="pills-tabContent">
+                      <div class="tab-pane fade show active" id="pills-upload" role="tabpanel"><input class="form-control form-control-lg" type="file" name="file" id="file-input" accept="image/*"></div>
+                      <div class="tab-pane fade" id="pills-url" role="tabpanel"><input type="url" class="form-control form-control-lg" name="url" placeholder="https://example.com/image.jpg"></div>
+                    </div>
+                    <div class="d-grid mt-3"><button type="submit" id="submit-btn" class="btn btn-primary btn-lg">Analisis Mendalam</button></div>
+                </form>
+            </div>
+        </div>
+
+        {% if error %}<div class="alert alert-danger mt-4"><strong>Error:</strong> {{ error }}</div>{% endif %}
+
+        {% if hasil and not hasil.error %}
+            <h2 class="mt-5 mb-3">Hasil Analisis: <span class="fw-normal fst-italic">{{ filename }}</span></h2>
+            <div class="alert alert-info d-flex align-items-center" role="alert"><i class="bi bi-robot fs-4 me-3"></i><div><strong>Deskripsi AI:</strong> {{ hasil.deskripsi_ai }}</div></div>
+            {% if hasil.sumber_gambar == 'WhatsApp' %}<div class="alert alert-warning d-flex align-items-center" role="alert"><i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i><div><strong>Gambar Terdeteksi Dari WhatsApp:</strong> Data metadata seperti model perangkat dan lokasi GPS kemungkinan besar telah dihapus oleh WhatsApp untuk melindungi privasi. Untuk analisis metadata lengkap, coba gunakan file foto asli dari kamera.</div></div>{% endif %}
+
+            <div class="row g-4">
+                <div class="col-lg-7">
+                    <div class="card mb-4">
+                        <div class="card-header"><i class="bi bi-image-alt me-2"></i>Visualisasi Deteksi</div>
+                        <div class="card-body"><img src="data:image/jpeg;base64,{{ hasil.gambar_visualisasi }}" alt="Gambar dengan Deteksi" class="annotated-image">{% if hasil.objek or hasil.wajah %}<div class="mt-3"><span class="badge text-bg-warning me-2">Wajah</span><span class="badge text-bg-success">Objek</span></div>{% endif %}</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header"><i class="bi bi-google me-2"></i>Lacak Sumber Gambar</div>
+                        <div class="card-body">
+                            {% if hasil.reverse_search_url %}
+                                <p>Gambar ini dianalisis melalui URL. Anda dapat melacak sumbernya secara online menggunakan Google Lens.</p>
+                                <a href="{{ hasil.reverse_search_url }}" target="_blank" class="btn btn-primary"><i class="bi bi-search me-2"></i>Lacak Gambar dengan Google Lens</a>
+                            {% else %}
+                                <p>Karena gambar ini diunggah dari file lokal, Anda perlu melakukannya secara manual. Gunakan tautan di bawah ini dan unggah kembali gambar Anda di sana.</p>
+                                <a href="https://images.google.com/" target="_blank" class="btn btn-outline-secondary me-2 mt-2">Google Images</a>
+                                <a href="https://tineye.com/" target="_blank" class="btn btn-outline-secondary me-2 mt-2">TinEye</a>
+                                <a href="https://www.bing.com/visualsearch" target="_blank" class="btn btn-outline-secondary mt-2">Bing Visual Search</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-5">
+                    <div class="card mb-4">
+                        <div class="card-header"><i class="bi bi-card-checklist me-2"></i>Properti & Kualitas</div>
+                        <ul class="list-group list-group-flush">
+                            {% for item in hasil.properti %}<li class="list-group-item d-flex justify-content-between align-items-center"><span>{{ item.label }} {% if item.tooltip %}<i class="bi bi-info-circle" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ item.tooltip }}"></i>{% endif %}</span>{% if item.is_link %}<a href="{{ item.value }}" target="_blank" class="btn btn-sm btn-outline-primary">Lihat di Peta <i class="bi bi-geo-alt-fill"></i></a>{% else %}<span class="badge bg-secondary rounded-pill">{{ item.value }}</span>{% endif %}</li>{% endfor %}
+                        </ul>
+                    </div>
+                    
+                    <div class="card mb-4">
+                         <div class="card-header"><i class="bi bi-palette-fill me-2"></i>Palet Warna Dominan</div>
+                         <div class="card-body"><div class="color-palette">{% for warna in hasil.warna %}<div class="color-swatch" style="background-color: {{ warna.rgb }}; flex-grow: {{ warna.proporsi|float * 100 }};" data-bs-toggle="tooltip" title="{{ warna.rgb }} ({{ "%.1f"|format(warna.proporsi|float * 100) }}%)"></div>{% endfor %}</div></div>
+                    </div>
+
+                    <div class="card mb-4">
+                        <div class="card-header"><i class="bi bi-people-fill me-2"></i>Analisis Wajah ({{ hasil.wajah|length }})</div>
+                        <div class="card-body p-0">
+                            {% if hasil.wajah %}<div class="table-responsive"><table class="table table-sm table-borderless mb-0"><thead><tr><th>Wajah</th><th>Emosi</th><th>Gender</th><th>Estimasi Usia</th></tr></thead><tbody>{% for face in hasil.wajah %}<tr><td><strong>{{ face.id }}</strong></td><td><span class="badge text-bg-primary">{{ face.emosi }}</span></td><td>{{ face.gender }}</td><td>~{{ face.usia }} tahun</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-center text-muted p-3">Tidak ada wajah yang terdeteksi.</p>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="card mb-4">
+                        <div class="card-header"><i class="bi bi-box-seam me-2"></i>Deteksi Lainnya</div>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item"><strong>Objek Terdeteksi:</strong> <div class="mt-2">{% for item in hasil.objek %}<span class="badge bg-success-subtle border text-success-emphasis m-1 p-2">{{ item }}</span>{% else %}<span class="text-muted">Tidak ada</span>{% endfor %}</div></li>
+                            <li class="list-group-item"><strong>Barcode / QR:</strong> <div class="mt-2">{% for item in hasil.barcode %}<span class="badge bg-dark-subtle border text-dark-emphasis m-1 p-2">{{ item }}</span>{% endfor %}</div></li>
+                        </ul>
+                    </div>
+
+                    <div class="card mb-4">
+                        <div class="card-header"><i class="bi bi-file-text-fill me-2"></i>Teks dari Gambar (OCR)</div>
+                        <div class="card-body">
+                            <pre class="bg-body-tertiary p-3 rounded small">{{ hasil.teks_ocr }}</pre>
+                            {% if hasil.teks_ocr_lang %}<strong>Bahasa:</strong> <span class="badge text-bg-info">{{ hasil.teks_ocr_lang }}</span><strong class="ms-3">Sentimen:</strong> <span class="badge text-bg-info">{{ hasil.teks_ocr_sentimen }}</span>{% endif %}
+                        </div>
+                    </div>
+                    
+                     <div class="card">
+                        <div class="card-header"><i class="bi bi-camera-fill me-2"></i>Metadata Perangkat (EXIF)</div>
+                        <div class="card-body p-0" style="max-height: 250px; overflow-y: auto;">
+                            {% if hasil.metadata %}<div class="table-responsive"><table class="table table-sm table-striped mb-0"><tbody>{% for item in hasil.metadata %}<tr><td class="ps-3 text-muted">{{ item.label }}</td><td class="text-end pe-3"><strong>{{ item.value }}</strong></td></tr>{% endfor %}</tbody></table></div>
+                            {% else %}<p class="text-center text-muted p-3">Tidak ada data EXIF yang ditemukan.</p>{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="d-grid gap-2 col-6 mx-auto mt-5">
+                <a href="/generate_pdf" class="btn btn-secondary btn-lg"><i class="bi bi-file-earmark-pdf-fill me-2"></i>Unduh Laporan PDF</a>
+            </div>
+        {% endif %}
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+        document.getElementById('upload-form').addEventListener('submit', function() { document.getElementById('loading-spinner').style.display = 'flex'; });
+        const themeToggle = document.getElementById('theme-toggle');
+        const htmlEl = document.documentElement;
+        themeToggle.addEventListener('click', () => {
+            if (htmlEl.getAttribute('data-bs-theme') === 'dark') {
+                htmlEl.setAttribute('data-bs-theme', 'light');
+                themeToggle.innerHTML = '<i class="bi bi-moon-stars-fill"></i>';
+            } else {
+                htmlEl.setAttribute('data-bs-theme', 'dark');
+                themeToggle.innerHTML = '<i class="bi bi-sun-fill"></i>';
+            }
+        });
+    </script>
+</body>
+</html>
